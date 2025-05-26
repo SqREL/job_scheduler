@@ -3,16 +3,22 @@ require 'rufus-scheduler'
 require 'logger'
 require 'yaml'
 require 'fileutils'
+require 'uri'
+require_relative 'job'
+require_relative 'job_scheduler/errors'
+require_relative 'job_scheduler/job_history'
 
 class JobScheduler
   attr_reader :logger, :scheduler, :jobs_dir, :repo_url
 
   def initialize(repo_url:, jobs_dir: './jobs', log_level: Logger::INFO)
-    @repo_url = repo_url
+    @repo_url = validate_repo_url(repo_url)
+    validate_jobs_dir_safety!(jobs_dir)
     @jobs_dir = File.expand_path(jobs_dir)
-    @logger = Logger.new(STDOUT)
-    @logger.level = log_level
+    @logger = create_logger(log_level)
     @scheduler = Rufus::Scheduler.new
+    @job_history = JobSchedulerComponents::JobHistory.new
+    @active_jobs = {}
     
     setup_jobs_directory
   end
@@ -40,6 +46,20 @@ class JobScheduler
     reload_jobs
   end
 
+  def health_check
+    {
+      status: 'healthy',
+      active_jobs: @active_jobs.size,
+      total_executions: @job_history.total_executions,
+      recent_failures: @job_history.recent_failures(10),
+      repository_status: repository_health
+    }
+  end
+
+  def job_stats
+    @job_history.stats
+  end
+
   private
 
   def setup_jobs_directory
@@ -61,8 +81,12 @@ class JobScheduler
         Git.clone(repo_url, jobs_dir)
         logger.info "Repository cloned successfully"
       end
+    rescue Git::GitExecuteError => e
+      logger.error "Failed to sync repository: #{e.message}"
+      raise JobSchedulerErrors::GitError, "Failed to sync repository: #{e.message}"
     rescue => e
       logger.error "Failed to sync repository: #{e.message}"
+      raise JobSchedulerErrors::GitError, "Failed to sync repository: #{e.message}"
     end
   end
 
@@ -93,45 +117,91 @@ class JobScheduler
     end
 
     begin
-      config = YAML.load_file(config_file)
-      schedule = config['schedule']
-      
-      unless schedule
-        logger.warn "Skipping job #{job_name}: no schedule defined"
+      # Try to create and validate the job first
+      job = Job.new(job_name, job_path)
+      unless job.valid?
+        logger.warn "Validation failed for job #{job_name}"
         return
       end
 
       # Schedule the job
-      scheduler.cron schedule do
-        execute_job(job_name, job_path, execute_file)
+      scheduler.cron job.schedule do
+        execute_job_with_tracking(job)
       end
 
-      logger.info "Loaded job: #{job_name} with schedule: #{schedule}"
+      logger.info "Loaded job: #{job_name} with schedule: #{job.schedule}"
+    rescue JobSchedulerErrors::JobConfigurationError => e
+      logger.error "Configuration error for job #{job_name}: #{e.message}"
+    rescue JobSchedulerErrors::SecurityError => e
+      logger.error "Security error for job #{job_name}: #{e.message}"
     rescue => e
       logger.error "Failed to load job #{job_name}: #{e.message}"
     end
   end
 
-  def execute_job(job_name, job_path, execute_file)
-    logger.info "Executing job: #{job_name}"
-    start_time = Time.now
+  def execute_job_with_tracking(job)
+    execution_id = "#{job.name}_#{Time.now.to_i}_#{rand(1000)}"
+    @active_jobs[execution_id] = { job: job, started_at: Time.now }
     
     begin
-      # Change to job directory and execute
-      Dir.chdir(job_path) do
-        output = `ruby #{File.basename(execute_file)} 2>&1`
-        exit_status = $?.exitstatus
-        
-        if exit_status == 0
-          logger.info "Job #{job_name} completed successfully in #{Time.now - start_time}s"
-          logger.debug "Output: #{output}" unless output.empty?
-        else
-          logger.error "Job #{job_name} failed with exit code #{exit_status}"
-          logger.error "Error output: #{output}"
-        end
-      end
+      result = job.execute(logger)
+      @job_history.add_execution(job.name, true, result[:execution_time], result[:output])
+    rescue JobSchedulerErrors::JobTimeoutError => e
+      logger.error "Job #{job.name} timed out: #{e.message}"
+      @job_history.add_execution(job.name, false, job.timeout, e.message)
+    rescue JobSchedulerErrors::JobExecutionError => e
+      logger.error "Job #{job.name} execution failed: #{e.message}"
+      @job_history.add_execution(job.name, false, 0, e.message)
     rescue => e
-      logger.error "Failed to execute job #{job_name}: #{e.message}"
+      logger.error "Unexpected error executing job #{job.name}: #{e.message}"
+      @job_history.add_execution(job.name, false, 0, e.message)
+    ensure
+      @active_jobs.delete(execution_id)
+    end
+  end
+
+  private
+
+  def validate_repo_url(url)
+    begin
+      uri = URI.parse(url)
+      unless %w[http https git ssh].include?(uri.scheme) || url.match?(/\A[\w\-\.]+@[\w\-\.]+:/)
+        raise JobSchedulerErrors::ValidationError, "Invalid repository URL scheme"
+      end
+      url
+    rescue URI::InvalidURIError
+      raise JobSchedulerErrors::ValidationError, "Invalid repository URL format"
+    end
+  end
+
+  def validate_jobs_dir_safety!(path)
+    if path.include?('..') || path.include?('../')
+      raise JobSchedulerErrors::SecurityError, "Unsafe jobs directory path"
+    end
+  end
+
+  def create_logger(log_level)
+    logger = Logger.new(STDOUT)
+    logger.level = log_level
+    logger.formatter = proc do |severity, datetime, progname, msg|
+      "[#{datetime.strftime('%Y-%m-%d %H:%M:%S')}] #{severity}: #{msg}\n"
+    end
+    logger
+  end
+
+  def repository_health
+    return 'not_cloned' unless Dir.exist?(File.join(jobs_dir, '.git'))
+    
+    begin
+      git = Git.open(jobs_dir)
+      last_commit = git.log.first
+      {
+        status: 'healthy',
+        last_commit: last_commit.sha[0..7],
+        last_commit_date: last_commit.date
+      }
+    rescue => e
+      { status: 'error', message: e.message }
     end
   end
 end

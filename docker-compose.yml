@@ -5,7 +5,24 @@ services:
     build: .
     environment:
       - REPO_URL=https://github.com/youruser/jobs-repo.git
+      - LOG_LEVEL=INFO
     volumes:
-      - ./jobs:/app/jobs
-      - ./logs:/app/logs
+      - job_data:/app/jobs
+      - job_history:/app/job_history.json
+      - /var/log/job_scheduler:/app/logs
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ruby", "-e", "require_relative 'lib/job_scheduler'; puts 'healthy'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  job_data:
+  job_history:
