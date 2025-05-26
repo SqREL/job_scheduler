@@ -10,5 +10,6 @@ gem 'base64'  # Required for Ruby 3.4+
 group :development, :test do
   gem 'rspec', '~> 3.12'
   gem 'rspec-mocks', '~> 3.12'
+  gem 'rspec_junit_formatter', '~> 0.6'
   gem 'timecop', '~> 0.9'
 end

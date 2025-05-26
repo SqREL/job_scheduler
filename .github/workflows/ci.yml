@@ -58,7 +58,7 @@ jobs:
           -v ${{ github.workspace }}:/workspace \
           -w /workspace \
           test-image \
-          bundle exec rspec --format progress --format RspecJunitFormatter --out /tmp/rspec.xml
+          bundle exec rspec --format progress
 
     - name: Run linting checks
       run: |
@@ -118,6 +118,7 @@ jobs:
         path: |
           /tmp/rspec.xml
         retention-days: 30
+        if-no-files-found: ignore
 
   build-and-push:
     needs: test
