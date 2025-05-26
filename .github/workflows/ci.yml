@@ -45,6 +45,7 @@ jobs:
         context: .
         target: test
         push: false
+        load: true
         tags: test-image
         cache-from: type=gha
         cache-to: type=gha,mode=max
