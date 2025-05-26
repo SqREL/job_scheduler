@@ -54,37 +54,25 @@ jobs:
 
     - name: Run tests in Docker
       run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          test-image \
-          bundle exec rspec --format progress
+        docker run --rm test-image
 
     - name: Run linting checks
       run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          test-image \
-          sh -c "
-            echo '=== Running Ruby syntax check ===' &&
-            find . -name '*.rb' -not -path './vendor/*' -exec ruby -c {} \; &&
-            echo '=== All syntax checks passed ==='
-          "
+        docker run --rm test-image sh -c "
+          echo '=== Running Ruby syntax check ===' &&
+          find . -name '*.rb' -not -path './vendor/*' -exec ruby -c {} \; &&
+          echo '=== All syntax checks passed ==='
+        "
 
     - name: Run security checks
       run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          test-image \
-          sh -c "
-            echo '=== Checking for hardcoded secrets ===' &&
-            ! grep -r -i 'password\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
-            ! grep -r -i 'secret\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
-            ! grep -r -i 'token\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
-            echo '=== Security checks passed ==='
-          "
+        docker run --rm test-image sh -c "
+          echo '=== Checking for hardcoded secrets ===' &&
+          ! grep -r -i 'password\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
+          ! grep -r -i 'secret\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
+          ! grep -r -i 'token\s*=' --include='*.rb' --include='*.yml' . || exit 1 &&
+          echo '=== Security checks passed ==='
+        "
 
     - name: Test Docker container health
       run: |
