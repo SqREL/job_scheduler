@@ -2,6 +2,7 @@ require 'rspec'
 require 'timecop'
 require 'fileutils'
 require 'tmpdir'
+require 'stringio'
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

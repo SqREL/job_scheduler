@@ -169,5 +169,107 @@ RSpec.describe Job do
       job = Job.new(job_name, job_path)
       expect(job.environment).to eq({})
     end
+
+    context 'with secrets management' do
+      let(:secrets_file) { File.join(@temp_dir, 'job_secrets.json.enc') }
+      let(:key_file) { File.join(@temp_dir, 'job_secrets.key') }
+
+      before do
+        # Set up secrets for testing
+        secrets_manager = JobSchedulerComponents::SecretsManager.new(
+          secrets_file: secrets_file,
+          key_file: key_file
+        )
+        secrets_manager.set('TEST_SECRET', 'secret_value')
+        
+        # Set up environment variable
+        ENV['TEST_ENV_VAR'] = 'env_value'
+      end
+
+      after do
+        ENV.delete('TEST_ENV_VAR')
+      end
+
+      it 'resolves secret references in environment variables' do
+        config = {
+          'schedule' => '0 */6 * * *',
+          'environment' => {
+            'SECRET_VAL' => 'secret:TEST_SECRET',
+            'PLAIN_VAL' => 'plain_value'
+          }
+        }
+        File.write(File.join(job_path, 'config.yml'), config.to_yaml)
+        
+        # Mock the secrets manager to use our test files
+        allow(JobSchedulerComponents::SecretsManager).to receive(:new).and_return(
+          JobSchedulerComponents::SecretsManager.new(
+            secrets_file: secrets_file,
+            key_file: key_file
+          )
+        )
+        
+        job = Job.new(job_name, job_path)
+        env = job.environment
+        
+        expect(env['SECRET_VAL']).to eq('secret_value')
+        expect(env['PLAIN_VAL']).to eq('plain_value')
+      end
+
+      it 'resolves environment variable references' do
+        config = {
+          'schedule' => '0 */6 * * *',
+          'environment' => {
+            'ENV_VAL' => 'env:TEST_ENV_VAR',
+            'PLAIN_VAL' => 'plain_value'
+          }
+        }
+        File.write(File.join(job_path, 'config.yml'), config.to_yaml)
+        
+        # Mock the secrets manager
+        allow(JobSchedulerComponents::SecretsManager).to receive(:new).and_return(
+          JobSchedulerComponents::SecretsManager.new(
+            secrets_file: secrets_file,
+            key_file: key_file
+          )
+        )
+        
+        job = Job.new(job_name, job_path)
+        env = job.environment
+        
+        expect(env['ENV_VAL']).to eq('env_value')
+        expect(env['PLAIN_VAL']).to eq('plain_value')
+      end
+
+      it 'falls back to plain environment when secrets unavailable' do
+        config = {
+          'schedule' => '0 */6 * * *',
+          'environment' => {
+            'SECRET_VAL' => 'secret:NONEXISTENT_SECRET',
+            'PLAIN_VAL' => 'plain_value'
+          }
+        }
+        File.write(File.join(job_path, 'config.yml'), config.to_yaml)
+        
+        # Mock secrets manager to raise an error
+        allow(JobSchedulerComponents::SecretsManager).to receive(:new).and_raise(StandardError.new('Secrets unavailable'))
+        
+        # Capture warnings by monitoring STDERR
+        original_stderr = $stderr
+        captured_warnings = StringIO.new
+        $stderr = captured_warnings
+        
+        job = Job.new(job_name, job_path)
+        env = job.environment
+        
+        # Restore stderr
+        $stderr = original_stderr
+        warning_output = captured_warnings.string
+        
+        # Should fall back to original config
+        expect(env['SECRET_VAL']).to eq('secret:NONEXISTENT_SECRET')
+        expect(env['PLAIN_VAL']).to eq('plain_value')
+        expect(warning_output).to match(/Warning: Failed to resolve secrets/)
+      end
+    end
   end
 end

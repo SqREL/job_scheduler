@@ -2,6 +2,7 @@ require 'yaml'
 require 'timeout'
 require 'shellwords'
 require_relative 'job_scheduler/errors'
+require_relative 'job_scheduler/secrets_manager'
 
 class Job
   attr_reader :name, :path, :config
@@ -35,7 +36,18 @@ class Job
   end
 
   def environment
-    config['environment'] || {}
+    env_config = config['environment'] || {}
+    
+    # Resolve secret references in environment variables
+    begin
+      secrets_manager = JobSchedulerComponents::SecretsManager.new
+      secrets_manager.resolve_environment(env_config)
+    rescue => e
+      # Log warning but don't fail the job if secrets are unavailable
+      # This allows jobs to run with plain environment variables
+      warn "Warning: Failed to resolve secrets for job #{name}: #{e.message}"
+      env_config
+    end
   end
 
   def execute(logger)

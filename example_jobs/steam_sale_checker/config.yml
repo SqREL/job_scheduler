@@ -1,0 +1,11 @@
+schedule: "0 */6 * * *"  # Check every 6 hours
+description: "Check Steam for sales and notify via Telegram"
+timeout: 120  # 2 minutes timeout
+environment:
+  # Use secret references instead of plain text
+  TELEGRAM_BOT_TOKEN: "secret:TELEGRAM_BOT_TOKEN"
+  TELEGRAM_CHAT_ID: "secret:TELEGRAM_CHAT_ID"
+  
+  # You can mix secrets, environment variables, and plain values
+  STEAM_WISHLIST_URL: "env:STEAM_WISHLIST_URL"  # From system environment
+  JOB_NAME: "Steam Sale Checker"  # Plain text value

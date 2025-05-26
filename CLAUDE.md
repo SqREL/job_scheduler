@@ -45,6 +45,25 @@ asdf exec bundle exec rspec --format documentation
 ./bin/scheduler -r https://github.com/your/jobs-repo.git -d /custom/path
 ```
 
+### Secrets Management
+```bash
+# Store secrets securely (AES-256-GCM encrypted)
+./bin/secrets set TELEGRAM_BOT_TOKEN "1234567890:ABCdef..."
+./bin/secrets set DATABASE_PASSWORD "secure_password"
+
+# List, get, delete secrets
+./bin/secrets list
+./bin/secrets get TELEGRAM_BOT_TOKEN  # Shows masked value
+./bin/secrets delete OLD_API_KEY
+
+# Import from environment variables (SECRET_* prefix)
+export SECRET_API_KEY="your_key"
+./bin/secrets import
+
+# Backup encrypted secrets
+./bin/secrets backup ./backup/secrets.json.enc
+```
+
 ### Docker Operations
 ```bash
 # Build and run with docker-compose
@@ -79,6 +98,12 @@ docker build -t ruby-scheduler .
 - Provides statistics and failure analysis
 - Maintains rolling history (last 1000 executions)
 - Supports per-job and global statistics
+
+**SecretsManager (`lib/job_scheduler/secrets_manager.rb`)**
+- Secure secrets storage with AES-256-GCM encryption
+- Supports multiple reference types: secret:, env:, file:, plain text
+- CLI tool for secrets management (`bin/secrets`)
+- Environment variable resolution at job execution time
 
 **Error Hierarchy (`lib/job_scheduler/errors.rb`)**
 - Custom exception classes for specific error scenarios

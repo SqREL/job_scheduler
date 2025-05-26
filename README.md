@@ -75,15 +75,40 @@ schedule: "0 9 * * 1-5"  # Weekdays at 9 AM
 # Optional: Job description
 description: "Send daily email report"
 
-# Optional: Timeout in seconds (default: no timeout)
+# Optional: Timeout in seconds (default: 300)
 timeout: 300
 
 # Optional: Environment variables for the job
 environment:
-  API_KEY: "your-api-key"
-  DATABASE_URL: "postgresql://user:pass@localhost/db"
-  SMTP_HOST: "smtp.example.com"
+  # 🔐 SECURE: Use secret references (recommended)
+  API_KEY: "secret:API_KEY"
+  DATABASE_URL: "secret:DATABASE_URL"
+  
+  # Or mix with other reference types
+  SMTP_HOST: "env:SMTP_HOST"        # From system environment
+  CONFIG_FILE: "file:/etc/config"   # From file content
+  LOG_LEVEL: "INFO"                 # Plain text value
 ```
+
+### 🔐 Secrets Management
+
+For security, avoid hardcoding sensitive values in job configs. Use the built-in secrets management system:
+
+```bash
+# Store secrets securely (encrypted)
+./bin/secrets set API_KEY "your-secret-api-key"
+./bin/secrets set DATABASE_URL "postgresql://user:pass@localhost/db"
+
+# List stored secrets
+./bin/secrets list
+
+# Reference secrets in job configs
+environment:
+  API_KEY: "secret:API_KEY"          # ✅ Secure
+  # API_KEY: "actual-secret-value"   # ❌ Insecure
+```
+
+**See [docs/SECRETS.md](docs/SECRETS.md) for complete secrets management documentation.**
 
 ### execute.rb Format
 

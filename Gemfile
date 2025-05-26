@@ -5,6 +5,7 @@ gem 'rufus-scheduler', '~> 3.8'
 gem 'logger'
 gem 'yaml'
 gem 'timeout', '~> 0.4'
+gem 'base64'  # Required for Ruby 3.4+
 
 group :development, :test do
   gem 'rspec', '~> 3.12'
