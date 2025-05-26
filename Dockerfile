@@ -1,7 +1,7 @@
 # Base stage with common dependencies
 FROM ruby:3.2-alpine AS base
 
-RUN apk add --no-cache git build-base
+RUN apk add --no-cache git build-base tzdata
 
 # Create non-root user
 RUN addgroup -g 1000 deploy && \
