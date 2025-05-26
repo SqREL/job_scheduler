@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/job_scheduler'
+require 'optparse'
+
+options = {
+  repo_url: nil,
+  jobs_dir: './jobs',
+  log_level: Logger::INFO,
+  force_sync: false
+}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: scheduler [options]"
+
+  opts.on("-r", "--repo URL", "Git repository URL") do |url|
+    options[:repo_url] = url
+  end
+
+  opts.on("-d", "--jobs-dir DIR", "Jobs directory (default: ./jobs)") do |dir|
+    options[:jobs_dir] = dir
+  end
+
+  opts.on("-v", "--verbose", "Verbose logging") do
+    options[:log_level] = Logger::DEBUG
+  end
+
+  opts.on("-f", "--force-sync", "Force sync and exit") do
+    options[:force_sync] = true
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+unless options[:repo_url]
+  puts "Error: Repository URL is required"
+  puts "Use -h for help"
+  exit 1
+end
+
+scheduler = JobScheduler.new(
+  repo_url: options[:repo_url],
+  jobs_dir: options[:jobs_dir],
+  log_level: options[:log_level]
+)
+
+if options[:force_sync]
+  scheduler.force_sync
+  puts "Force sync completed"
+else
+  trap('INT') { puts "\nShutting down..."; exit }
+  scheduler.start
+end

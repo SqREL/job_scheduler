@@ -1,0 +1,14 @@
+[Unit]
+Description=Ruby Job Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/ruby-scheduler
+ExecStart=/usr/bin/ruby bin/scheduler -r https://github.com/youruser/jobs-repo.git
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
